@@ -1,0 +1,54 @@
+// netlify/functions/dualCloud.js
+import fetch from "node-fetch";
+
+export async function handler(event, context) {
+  try {
+    const { text } = JSON.parse(event.body);
+
+    if (!text) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "No text provided" }),
+      };
+    }
+
+    // Call Hugging Face TTS
+    const hfResponse = await fetch("https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HF_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ inputs: text }),
+    });
+
+    const hfResult = await hfResponse.arrayBuffer();
+
+    // Call Microsoft Azure TTS
+    const azureResponse = await fetch(`https://${process.env.AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": process.env.AZURE_API_KEY,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3",
+      },
+      body: `<speak version='1.0' xml:lang='en-US'><voice xml:lang='en-US' xml:gender='Female'>${text}</voice></speak>`,
+    });
+
+    const azureResult = await azureResponse.arrayBuffer();
+
+    // Return both results
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        huggingface: Buffer.from(hfResult).toString("base64"),
+        microsoft: Buffer.from(azureResult).toString("base64"),
+      }),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message }),
+    };
+  }
+}
