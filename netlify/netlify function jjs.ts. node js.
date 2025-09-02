@@ -1,0 +1,34 @@
+import fetch from "node-fetch";
+
+export async function handler(event) {
+  const { text } = JSON.parse(event.body);
+
+  // Call Hugging Face
+  const hfResponse = await fetch("https://api-inference.huggingface.co/models/YOUR_MODEL", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HF_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ inputs: text })
+  });
+
+  // Call Microsoft Azure (example: TTS)
+  const azureResponse = await fetch(`https://YOUR_REGION.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    method: "POST",
+    headers: {
+      "Ocp-Apim-Subscription-Key": process.env.AZURE_TTS_KEY,
+      "Content-Type": "application/ssml+xml",
+      "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm"
+    },
+    body: `<speak version='1.0' xml:lang='en-US'><voice xml:lang='en-US'>${text}</voice></speak>`
+  });
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      huggingface: await hfResponse.json(),
+      azure: await azureResponse.text()
+    })
+  };
+                          }
